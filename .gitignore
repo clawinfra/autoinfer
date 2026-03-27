@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.venv/
+*.tsv
+!benchmarks/wikitext_sample.txt
+.pytest_cache/
+.coverage
+htmlcov/
