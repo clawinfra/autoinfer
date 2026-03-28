@@ -136,41 +136,76 @@ def _load_legacy_phase789(path: str) -> list[LegacyResult]:
 
 
 def _load_legacy_phase1012(path: str) -> list[LegacyResult]:
-    """Load phase 10/11/12. Phase 12 has shifted columns (model_file=tok_s)."""
+    """Load phase 10/11/12.
+
+    Phase 12 has a mismatched header — the header claims 'model_file' etc.
+    but the data rows follow the phase10 schema (exp_id, tok_s, vram_mb, ...).
+    We detect this by checking if 'model_file' column contains a float.
+    """
     results = []
     try:
         with open(path) as f:
             reader = csv.DictReader(f, delimiter="\t")
             headers = reader.fieldnames or []
+
+            # Detect phase 12 shifted format
+            is_phase12_shifted = "model_file" in headers
+
             for row in reader:
-                # Phase 12 check: if 'model_file' col has a float, it's tok_s
-                if "model_file" in headers:
-                    try:
+                try:
+                    if is_phase12_shifted:
+                        # Phase 12: header is wrong. Data rows are:
+                        # exp_id, tok_s, vram_mb, n_ctx, kv_type_k, kv_type_v,
+                        # flash_attn, n_gpu, n_batch, n_ubatch, label, status, notes
+                        # But DictReader maps: model_file→tok_s, n_gpu→vram_mb, etc.
                         tok_s = float(row.get("model_file") or 0)
-                    except (ValueError, TypeError):
+                        status_val = row.get("n_gen") or row.get("status") or "ok"
+                        if tok_s <= 0 or status_val != "ok":
+                            continue
+
+                        # Parse from notes field which has the real details
+                        notes = row.get("tok_s") or row.get("notes") or ""
+                        # Notes format: "n_gpu=26, batch=32/16, q8_0 KV, n_ctx=256, ..."
+                        import re
+                        n_gpu_m = re.search(r"n_gpu=(\d+)", notes)
+                        batch_m = re.search(r"batch=(\d+)/(\d+)", notes)
+                        ctx_m = re.search(r"n_ctx=(\d+)", notes)
+
+                        params = {
+                            "n_gpu": int(n_gpu_m.group(1)) if n_gpu_m else 16,
+                            "n_ctx": int(ctx_m.group(1)) if ctx_m else 512,
+                            "batch": int(batch_m.group(1)) if batch_m else 252,
+                            "ubatch": int(batch_m.group(2)) if batch_m else 94,
+                            "kv_type": row.get("batch_size") or "q8_0",  # shifted: batch_size col = kv_type_k
+                            "flash_attn": True,  # all phase 12 used flash
+                            "n_threads": 11,
+                            "n_gen": 200,  # phase 12 default
+                        }
+                    else:
+                        # Standard phase 10/11 format
                         tok_s = float(row.get("tok_s") or 0)
-                else:
-                    tok_s = float(row.get("tok_s") or 0)
+                        status_val = row.get("status", "ok")
+                        if tok_s <= 0 or status_val != "ok":
+                            continue
 
-                status = row.get("status", "ok")
-                if tok_s <= 0 or status != "ok":
+                        kv_k = row.get("kv_type_k") or row.get("type_k") or "q8_0"
+                        flash_raw = row.get("flash_attn", "True")
+                        flash = flash_raw in ("True", "1", "true", True)
+
+                        params = {
+                            "n_gpu": int(row.get("n_gpu") or 16),
+                            "n_ctx": int(row.get("n_ctx") or 512),
+                            "batch": int(row.get("n_batch") or 252),
+                            "ubatch": int(row.get("n_ubatch") or 94),
+                            "kv_type": kv_k,
+                            "flash_attn": flash,
+                            "n_threads": int(row.get("n_threads") or 11),
+                            "n_gen": 264,
+                        }
+
+                    results.append(LegacyResult(tok_s=tok_s, params=params))
+                except (ValueError, KeyError, TypeError, AttributeError):
                     continue
-
-                kv_k = row.get("kv_type_k") or row.get("type_k") or "q8_0"
-                flash_raw = row.get("flash_attn", "True")
-                flash = flash_raw in ("True", "1", "true", True)
-
-                params = {
-                    "n_gpu": int(row.get("n_gpu") or 16),
-                    "n_ctx": int(row.get("n_ctx") or 512),
-                    "batch": int(row.get("n_batch") or row.get("batch_size") or 252),
-                    "ubatch": int(row.get("n_ubatch") or row.get("ubatch_size") or 94),
-                    "kv_type": kv_k,
-                    "flash_attn": flash,
-                    "n_threads": int(row.get("n_threads") or 11),
-                    "n_gen": int(row.get("n_gen") or 264),
-                }
-                results.append(LegacyResult(tok_s=tok_s, params=params))
     except Exception as e:
         logger.warning(f"Error loading {path}: {e}")
     return results
@@ -218,17 +253,24 @@ def _suggest_params(trial: optuna.Trial) -> dict:
 def _warm_start_study(
     study: optuna.Study,
     legacy_results: list[LegacyResult],
-    max_seeds: int = 20,
+    max_seeds: int = 5,
 ) -> int:
     """Seed the Optuna study with top legacy results.
 
+    Only seeds a small number (default 5) to let the optimizer explore
+    freely. Uses diverse configs — dedup by n_gpu to avoid all seeds
+    hitting the same GPU count (which may OOM for different model sizes).
+
     Returns number of trials enqueued.
     """
-    # Sort by tok/s descending, take top N
-    top = sorted(legacy_results, key=lambda r: r.tok_s, reverse=True)[:max_seeds]
+    # Sort by tok/s descending
+    top = sorted(legacy_results, key=lambda r: r.tok_s, reverse=True)
     enqueued = 0
+    seen_n_gpu: set[int] = set()
 
     for r in top:
+        if enqueued >= max_seeds:
+            break
         try:
             params = {}
             for name, spec in SEARCH_SPACE.items():
@@ -244,9 +286,17 @@ def _warm_start_study(
                 params[name] = val
 
             # Must have at least the key params
-            if "n_gpu" in params and "batch" in params:
-                study.enqueue_trial(params)
-                enqueued += 1
+            if "n_gpu" not in params or "batch" not in params:
+                continue
+
+            # Dedup by n_gpu to get diverse GPU allocations
+            n_gpu = params["n_gpu"]
+            if n_gpu in seen_n_gpu:
+                continue
+            seen_n_gpu.add(n_gpu)
+
+            study.enqueue_trial(params)
+            enqueued += 1
         except (ValueError, KeyError, TypeError):
             continue
 
