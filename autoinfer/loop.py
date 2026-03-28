@@ -40,15 +40,40 @@ logger = logging.getLogger("autoinfer.loop")
 # ── Search space definition ──────────────────────────────────────────
 
 SEARCH_SPACE = {
-    "n_gpu": {"type": "int", "low": 12, "high": 28},
-    "n_ctx": {"type": "categorical", "choices": [512, 1024, 2048]},
-    "batch": {"type": "int", "low": 64, "high": 512},
-    "ubatch": {"type": "int", "low": 32, "high": 256},
-    "n_threads": {"type": "int", "low": 4, "high": 16},
-    "n_gen": {"type": "int", "low": 128, "high": 512},
-    "kv_type": {"type": "categorical", "choices": ["q8_0", "q4_0", "f16"]},
-    "flash_attn": {"type": "categorical", "choices": [True, False]},
+    # Nemotron-Cascade-2-30B guidance (2026-03-29):
+    # - Model is 17GB IQ2_XXS on 8GB VRAM → only 4-10 GPU layers fit; rest CPU-offloaded
+    # - Apple Flash Attention (fa=1) REQUIRED: SSM+MoE hybrid needs memory-efficient attn
+    # - PolarQuant / GIL KV cache: q4_0 and iq4_nl are the sweet spots for 8GB
+    #   (q8_0 wastes KV VRAM; f16 OOMs; iq4_nl = Google QJL-inspired non-linear quant)
+    # - GIL (GPU-CPU Interleaved Loading): keep n_threads=4-8, avoid 12+ (GIL contention)
+    # - Conservative ngl: 4-12 layers only — anything higher OOMs on 8GB
+    # - Small batch + ubatch: large batches = OOM; 32/16 or 64/32 are safe starting points
+    # - n_ctx=512 max (larger = OOM on 8GB with 17GB model)
+    "n_gpu": {"type": "int", "low": 2, "high": 12},          # 8GB VRAM limit, most layers CPU
+    "n_ctx": {"type": "categorical", "choices": [256, 512]},  # keep small — OOM risk
+    "batch": {"type": "int", "low": 16, "high": 128},         # conservative batch sizes
+    "ubatch": {"type": "int", "low": 8, "high": 64},          # ubatch ≤ batch always
+    "n_threads": {"type": "int", "low": 2, "high": 8},        # GIL-friendly: 4-8 threads optimal
+    "n_gen": {"type": "int", "low": 64, "high": 256},         # shorter gen = faster timeout detection
+    "kv_type": {"type": "categorical", "choices": ["q4_0", "iq4_nl", "q8_0"]},  # PolarQuant: iq4_nl = non-linear quant
+    "flash_attn": {"type": "categorical", "choices": [True]},  # FORCE fa=1: Apple Flash Attn required for SSM/MoE
 }
+
+# ── Nemotron priority seed configs ──────────────────────────────────
+# Based on Apple Flash Attn + PolarQuant + GIL thread guidance.
+# These are enqueued FIRST before any Bayesian proposals.
+NEMOTRON_PRIORITY_SEEDS = [
+    # Seed 1: ultra-conservative — pure CPU offload baseline
+    {"n_gpu": 2, "n_ctx": 256, "batch": 32, "ubatch": 16, "n_threads": 4, "n_gen": 64, "kv_type": "q4_0", "flash_attn": True},
+    # Seed 2: minimal GPU — 4 layers, GIL-optimal 6 threads
+    {"n_gpu": 4, "n_ctx": 256, "batch": 32, "ubatch": 16, "n_threads": 6, "n_gen": 64, "kv_type": "q4_0", "flash_attn": True},
+    # Seed 3: iq4_nl PolarQuant KV — non-linear quant saves KV VRAM
+    {"n_gpu": 4, "n_ctx": 512, "batch": 64, "ubatch": 32, "n_threads": 6, "n_gen": 128, "kv_type": "iq4_nl", "flash_attn": True},
+    # Seed 4: 8 GPU layers + q8_0 KV — if 4 layers work, try 8
+    {"n_gpu": 8, "n_ctx": 256, "batch": 32, "ubatch": 16, "n_threads": 4, "n_gen": 64, "kv_type": "q8_0", "flash_attn": True},
+    # Seed 5: GIL 8 threads + q4_0 — parallelise CPU layers
+    {"n_gpu": 6, "n_ctx": 512, "batch": 64, "ubatch": 32, "n_threads": 8, "n_gen": 128, "kv_type": "q4_0", "flash_attn": True},
+]
 
 
 # ── TSV column definitions ───────────────────────────────────────────
@@ -376,9 +401,18 @@ def run_loop(config: LoopConfig) -> dict:
         study_name="autoinfer_loop",
     )
 
-    # Warm-start with top legacy results
+    # ── Nemotron priority seeds: enqueue FIRST before any Bayesian proposals ──
+    # Apple Flash Attn (forced), PolarQuant/iq4_nl KV, GIL thread counts, conservative ngl
+    for seed_params in NEMOTRON_PRIORITY_SEEDS:
+        try:
+            study.enqueue_trial(seed_params)
+        except Exception:
+            pass
+    logger.info(f"Enqueued {len(NEMOTRON_PRIORITY_SEEDS)} Nemotron priority seeds (Flash+PolarQuant+GIL)")
+
+    # Warm-start with top legacy results (after priority seeds so they run first)
     n_seeded = _warm_start_study(study, legacy)
-    logger.info(f"Seeded study with {n_seeded} top configurations")
+    logger.info(f"Seeded study with {n_seeded} top legacy configurations")
 
     # ── 3. Init output TSV ──
     if config.output_path:
