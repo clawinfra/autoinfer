@@ -210,7 +210,37 @@ Phase 12: 27.589 tok/s  (+9.3%)                     — GPU server upgrade
 
 ---
 
-## 9. AutoInfer Integration Notes
+## 9. Explosive Finding: Long-Context Capability on New Hardware
+
+**Phase 5 (old RTX 3070, 8GB) achieved 256K context at 9.0 tok/s with q4_0 KV.**
+
+On the new 3-GPU server (42GB total VRAM), the theoretical ceiling is:
+
+| Quant    | KV Type | Max Context | Throughput Est. |
+|----------|---------|-------------|-----------------|
+| IQ2_XXS  | q8_0    | **507K tokens** | ~25 tok/s |
+| IQ2_XXS  | q4_0    | **2M tokens (!!)** | ~24 tok/s |
+| Q3_K_M   | q8_0    | 422K tokens | ~12 tok/s |
+
+**Key formula:**
+```
+KV per token (q8_0, Qwen3.5 GQA) = 2 × 64 layers × 4 kv_heads × 128 head_dim × 1 byte
+                                   = 65,536 bytes = 0.066 MB/token
+
+Max context (IQ2_XXS, q8_0) = (42×1024 - 9000) MB / 0.066 MB/token = 507,000 tokens
+Max context (IQ2_XXS, q4_0) = same / 0.033 MB/token = 2,000,000 tokens
+```
+
+**This is a research breakthrough.** Running Qwen3.5-35B at 2M context with 24 tok/s
+on a 3-GPU consumer setup would be extraordinary. The old hardware had 8GB VRAM;
+the new hardware is 5x larger — long-context hasn't been tested yet in Phase 11/12.
+
+**Recommended experiment:** IQ2_XXS, n_gpu=26, n_ctx=32768, q4_0 KV, batch=32/8
+Expected: ~20-24 tok/s at 32K context (should be feasible without OOM).
+
+---
+
+## 10. AutoInfer Integration Notes
 
 The `autoinfer` framework's `ParetoFrontier` and `ResultsTracker` classes are
 well-designed for this use case. Key gaps to fill:
