@@ -19,6 +19,7 @@ classifiers = [
 ]
 
 dependencies = [
+    "numpy<2",
     "optuna>=3.5",
 ]
 

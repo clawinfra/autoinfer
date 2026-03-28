@@ -4,6 +4,7 @@ Usage:
     autoinfer profile                          # Show hardware profile
     autoinfer optimize --model <path>          # Run optimization
     autoinfer analyze --results <path> [...]   # Analyze existing data
+    autoinfer loop --model <path>              # Run autonomous research loop
 """
 
 from __future__ import annotations
@@ -74,6 +75,57 @@ def cmd_optimize(args: argparse.Namespace) -> int:
     if args.output:
         print(f"\nResults saved to: {args.output}")
 
+    return 0
+
+
+def cmd_loop(args: argparse.Namespace) -> int:
+    """Run the autonomous research loop."""
+    import glob as glob_mod
+    from autoinfer.loop import LoopConfig, run_loop
+    from autoinfer.executor import BENCH_BINARY, MODEL_PATH
+
+    bench = args.bench or BENCH_BINARY
+    model = args.model or MODEL_PATH
+
+    # Expand globs in results paths
+    warmup_paths = []
+    for pattern in (args.results or []):
+        expanded = glob_mod.glob(pattern)
+        warmup_paths.extend(expanded if expanded else [pattern])
+
+    # Default warmup: try to find phase files
+    if not warmup_paths:
+        default_pattern = "/tmp/qwen35-moe-offload/results_phase*.tsv"
+        warmup_paths = sorted(glob_mod.glob(default_pattern))
+
+    output = args.output or "/tmp/qwen35-moe-offload/results_autoinfer.tsv"
+
+    print(f"AutoInfer Autonomous Research Loop")
+    print(f"  Bench:    {bench}")
+    print(f"  Model:    {model}")
+    print(f"  Warmup:   {len(warmup_paths)} files")
+    print(f"  Output:   {output}")
+    print(f"  Max exp:  {args.max_experiments or '∞'}")
+    print()
+
+    config = LoopConfig(
+        bench_binary=bench,
+        model_path=model,
+        warmup_paths=warmup_paths,
+        output_path=output,
+        max_experiments=args.max_experiments,
+        report_interval=args.report_interval,
+        seed=args.seed,
+    )
+
+    summary = run_loop(config)
+
+    # Print final summary
+    print(f"\nFinal summary:")
+    print(f"  Total experiments: {summary['total_experiments']}")
+    print(f"  Best tok/s: {summary['best_tok_s']:.3f}")
+    print(f"  New bests: {summary['new_bests']}")
+    print(f"  Failures: {summary['failures']}")
     return 0
 
 
@@ -152,12 +204,31 @@ def main(argv: list[str] | None = None) -> int:
     p_analyze.add_argument("results", nargs="+", help="TSV result files")
     p_analyze.add_argument("--target-quality", type=float, default=0.95, help="Quality threshold")
 
+    # Loop command
+    p_loop = subparsers.add_parser("loop", help="Run autonomous research loop")
+    p_loop.add_argument("--model", help="Path to GGUF model")
+    p_loop.add_argument("--bench", help="Path to bench binary")
+    p_loop.add_argument(
+        "--results", nargs="*", default=[],
+        help="Legacy TSV result files to warm-start from"
+    )
+    p_loop.add_argument("--output", help="Output TSV path for new results")
+    p_loop.add_argument(
+        "--max-experiments", type=int, default=0,
+        help="Max experiments to run (0 = infinite)"
+    )
+    p_loop.add_argument(
+        "--report-interval", type=int, default=10,
+        help="Report progress every N experiments"
+    )
+    p_loop.add_argument("--seed", type=int, default=42, help="Random seed")
+
     args = parser.parse_args(argv)
 
     if args.verbose:
-        logging.basicConfig(level=logging.DEBUG)
+        logging.basicConfig(level=logging.DEBUG, format="%(name)s %(levelname)s: %(message)s")
     else:
-        logging.basicConfig(level=logging.INFO)
+        logging.basicConfig(level=logging.INFO, format="%(name)s %(levelname)s: %(message)s")
 
     if args.command == "profile":
         return cmd_profile(args)
@@ -165,6 +236,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_optimize(args)
     elif args.command == "analyze":
         return cmd_analyze(args)
+    elif args.command == "loop":
+        return cmd_loop(args)
     else:
         parser.print_help()
         return 1
