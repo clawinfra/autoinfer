@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AutoInfer — How Fast Will Qwen3.5-35B Run on Your GPU?</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface2: #1c2129;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-dim: #8b949e;
+    --accent: #58a6ff;
+    --accent2: #3fb950;
+    --warn: #d29922;
+    --danger: #f85149;
+    --mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Cascadia Code', Consolas, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: var(--mono);
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+  .container { max-width: 900px; margin: 0 auto; padding: 2rem 1.5rem; }
+  .hero {
+    text-align: center;
+    padding: 3rem 0 2rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 2rem;
+  }
+  .hero h1 {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: var(--accent);
+    margin-bottom: 0.5rem;
+    letter-spacing: -0.02em;
+  }
+  .hero .sub {
+    font-size: 0.85rem;
+    color: var(--text-dim);
+  }
+  .hero .badge {
+    display: inline-block;
+    margin-top: 0.75rem;
+    padding: 0.25rem 0.75rem;
+    background: rgba(88, 166, 255, 0.1);
+    border: 1px solid rgba(88, 166, 255, 0.3);
+    border-radius: 999px;
+    font-size: 0.7rem;
+    color: var(--accent);
+  }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 1.25rem;
+  }
+  .card h2 {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--accent);
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .card h2 .icon { font-size: 1.1rem; }
+  .detect-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+  }
+  .detect-item {
+    background: var(--surface2);
+    border-radius: 6px;
+    padding: 0.75rem 1rem;
+  }
+  .detect-item .label {
+    font-size: 0.65rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.25rem;
+  }
+  .detect-item .value {
+    font-size: 0.85rem;
+    color: var(--text);
+    word-break: break-all;
+  }
+  .detect-item .value.highlight { color: var(--accent2); font-weight: 600; }
+  .slider-section {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+  }
+  .slider-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 0.5rem;
+  }
+  .slider-row label {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    white-space: nowrap;
+    min-width: 100px;
+  }
+  .slider-row input[type="range"] {
+    flex: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    outline: none;
+  }
+  .slider-row input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px; height: 16px;
+    background: var(--accent);
+    border-radius: 50%;
+    cursor: pointer;
+  }
+  .slider-row input[type="range"]::-moz-range-thumb {
+    width: 16px; height: 16px;
+    background: var(--accent);
+    border-radius: 50%;
+    cursor: pointer;
+    border: none;
+  }
+  .slider-row .val {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--accent);
+    min-width: 48px;
+    text-align: right;
+  }
+  .results-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+  }
+  .result-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem;
+    text-align: center;
+  }
+  .result-box .metric {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--accent2);
+  }
+  .result-box .metric.warn { color: var(--warn); }
+  .result-box .metric.danger { color: var(--danger); }
+  .result-box .unit {
+    font-size: 0.65rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    margin-top: 0.25rem;
+    letter-spacing: 0.05em;
+  }
+  .quant-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.75rem;
+  }
+  .quant-table th {
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    color: var(--text-dim);
+    font-weight: 500;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .quant-table td {
+    padding: 0.6rem 0.75rem;
+    border-bottom: 1px solid rgba(48, 54, 61, 0.5);
+  }
+  .quant-table tr.recommended { background: rgba(63, 185, 80, 0.08); }
+  .quant-table tr.recommended td:first-child { position: relative; }
+  .quant-table tr.recommended td:first-child::before {
+    content: '\2192';
+    position: absolute;
+    left: 0.15rem;
+    color: var(--accent2);
+    font-weight: 700;
+  }
+  .quant-table .tok { color: var(--accent2); font-weight: 600; }
+  .quant-table .qual { color: var(--warn); }
+  .quant-table .size { color: var(--text-dim); }
+  .quant-table .na { color: var(--text-dim); font-style: italic; }
+  .tag {
+    display: inline-block;
+    font-size: 0.6rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    margin-left: 0.3rem;
+    font-weight: 600;
+  }
+  .tag-rec { background: rgba(63, 185, 80, 0.15); color: var(--accent2); }
+  .tag-fast { background: rgba(88, 166, 255, 0.15); color: var(--accent); }
+  .tag-warn { background: rgba(210, 153, 34, 0.15); color: var(--warn); }
+  .config-block {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem 1.25rem;
+    font-size: 0.75rem;
+    line-height: 1.8;
+    overflow-x: auto;
+    white-space: pre;
+    color: var(--text-dim);
+    margin-top: 0.75rem;
+  }
+  .config-block .key { color: var(--accent); }
+  .config-block .val { color: var(--accent2); }
+  .config-block .comment { color: #6e7681; }
+  .chart-wrap {
+    position: relative;
+    width: 100%;
+    height: 300px;
+    margin-top: 0.75rem;
+  }
+  .caveat {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    text-align: center;
+    padding: 1.5rem 0;
+    border-top: 1px solid var(--border);
+    margin-top: 1.5rem;
+    line-height: 1.8;
+  }
+  .caveat a { color: var(--accent); text-decoration: none; }
+  .caveat a:hover { text-decoration: underline; }
+  .footer {
+    text-align: center;
+    padding: 1rem 0;
+    font-size: 0.65rem;
+    color: var(--text-dim);
+  }
+  .footer a { color: var(--accent); text-decoration: none; }
+  @media (max-width: 640px) {
+    .detect-grid { grid-template-columns: 1fr; }
+    .results-grid { grid-template-columns: repeat(2, 1fr); }
+    .hero h1 { font-size: 1.2rem; }
+    .container { padding: 1rem; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="hero">
+    <h1>&#9889; How Fast Will Qwen3.5-35B-A3B Run on Your GPU?</h1>
+    <div class="sub">Hardware-aware inference speed estimator &middot; Power-law model fitted from 770 experiments</div>
+    <div class="badge">AutoInfer &middot; Bayesian Optimization &middot; Quality-Adjusted Throughput</div>
+  </div>
+
+  <div class="card">
+    <h2><span class="icon">&#128269;</span> Detected Hardware</h2>
+    <div class="detect-grid">
+      <div class="detect-item">
+        <div class="label">GPU Renderer</div>
+        <div class="value" id="gpu-name">Detecting...</div>
+      </div>
+      <div class="detect-item">
+        <div class="label">Estimated VRAM</div>
+        <div class="value highlight" id="gpu-vram">&mdash;</div>
+      </div>
+      <div class="detect-item">
+        <div class="label">Platform</div>
+        <div class="value" id="platform">&mdash;</div>
+      </div>
+      <div class="detect-item">
+        <div class="label">CPU Cores</div>
+        <div class="value" id="cpu-cores">&mdash;</div>
+      </div>
+    </div>
+    <div class="slider-section">
+      <div class="slider-row">
+        <label>VRAM Override</label>
+        <input type="range" id="vram-slider" min="4" max="48" step="1" value="8">
+        <span class="val" id="vram-display">8 GB</span>
+      </div>
+      <div class="slider-row">
+        <label>System RAM</label>
+        <input type="range" id="ram-slider" min="8" max="128" step="4" value="32">
+        <span class="val" id="ram-display">32 GB</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="results-grid">
+    <div class="result-box">
+      <div class="metric" id="metric-toks">&mdash;</div>
+      <div class="unit">tok/s (best quant)</div>
+    </div>
+    <div class="result-box">
+      <div class="metric" id="metric-quant">&mdash;</div>
+      <div class="unit">recommended quant</div>
+    </div>
+    <div class="result-box">
+      <div class="metric" id="metric-ctx">&mdash;</div>
+      <div class="unit">max context</div>
+    </div>
+    <div class="result-box">
+      <div class="metric" id="metric-quality">&mdash;</div>
+      <div class="unit">quality score</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2><span class="icon">&#128202;</span> Quantization Comparison</h2>
+    <table class="quant-table">
+      <thead>
+        <tr>
+          <th style="padding-left:1.5rem">Quant</th>
+          <th>Size</th>
+          <th>Quality</th>
+          <th>Est. tok/s</th>
+          <th>Fits?</th>
+        </tr>
+      </thead>
+      <tbody id="quant-tbody"></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2><span class="icon">&#9881;&#65039;</span> Recommended Config</h2>
+    <div id="config-output" class="config-block">Calculating...</div>
+  </div>
+
+  <div class="card">
+    <h2><span class="icon">&#128200;</span> Speed vs Available Memory</h2>
+    <div class="chart-wrap">
+      <canvas id="speed-chart"></canvas>
+    </div>
+  </div>
+
+  <div class="caveat">
+    Based on <strong>770 experiments</strong> on RTX 3070 (8GB) + 32GB RAM &middot; Qwen3.5-35B-A3B via llama.cpp<br>
+    Power-law model: <code>tok/s = 9.66&times;10&#8315;&#8310; &times; (available_mem &minus; model_size)^4.247</code> &middot; Estimates &plusmn;30%<br>
+    <a href="https://github.com/clawinfra/autoinfer">&#128230; Get the AutoInfer CLI</a> &middot;
+    <a href="https://github.com/AlexChen31337/qwen35-moe-offload">&#128196; Raw experiment data</a>
+  </div>
+
+  <div class="footer">
+    Built by <a href="https://github.com/clawinfra">ClawInfra</a> &middot; AutoInfer &copy; 2026
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script>
+(function() {
+  'use strict';
+
+  // ═══════════════════════════════════════════
+  // EXPERIMENT DATA (770 experiments)
+  // ═══════════════════════════════════════════
+
+  var QUANTS = [
+    { name: 'IQ2_XXS', sizeGb: 9.0, bpw: 2.06, quality: 0.75, bestTokS: 27.589, count: 54 },
+    { name: 'IQ2_M',   sizeGb: 10.5, bpw: 2.50, quality: 0.85, bestTokS: 21.621, count: 20 },
+    { name: 'Q2_K',    sizeGb: 11.2, bpw: 2.63, quality: 0.88, bestTokS: 17.962, count: 2 },
+    { name: 'IQ3_S',   sizeGb: 13.2, bpw: 3.00, quality: 0.975, bestTokS: 15.223, count: 1 },
+    { name: 'Q3_K_M',  sizeGb: 14.7, bpw: 3.35, quality: 1.00, bestTokS: 12.331, count: 458 },
+    { name: 'IQ4_XS',  sizeGb: 16.8, bpw: 4.00, quality: 1.02, bestTokS: 9.802,  count: 1 },
+    { name: 'Q4_K_M',  sizeGb: 18.5, bpw: 4.50, quality: 1.03, bestTokS: null,   count: 0 }
+  ];
+
+  // Power-law: tok/s = C * (total_avail - model_size)^alpha
+  // Fitted on RTX 3070 (8GB VRAM) + 32GB RAM = ~27.2GB effective
+  var ALPHA = 4.247;
+  var C = 9.66e-6;
+
+  // GPU VRAM lookup
+  var GPU_VRAM = {
+    'RTX 5090':32,'RTX 5080':16,'RTX 5070 TI':16,'RTX 5070':12,
+    'RTX 4090':24,'RTX 4080 SUPER':16,'RTX 4080':16,
+    'RTX 4070 TI SUPER':16,'RTX 4070 TI':12,'RTX 4070 SUPER':12,'RTX 4070':12,
+    'RTX 4060 TI':8,'RTX 4060':8,
+    'RTX 3090 TI':24,'RTX 3090':24,'RTX 3080 TI':12,'RTX 3080':10,
+    'RTX 3070 TI':8,'RTX 3070':8,'RTX 3060 TI':8,'RTX 3060':12,
+    'RTX 2080 TI':11,'RTX 2080 SUPER':8,'RTX 2080':8,
+    'RTX 2070 SUPER':8,'RTX 2070':8,'RTX 2060 SUPER':8,'RTX 2060':6,
+    'GTX 1660 TI':6,'GTX 1660 SUPER':6,'GTX 1660':6,'GTX 1650':4,
+    'RTX A6000':48,'RTX A5000':24,'RTX A4000':16,
+    'A100':80,'H100':80,'L40S':48,'L40':48,'L4':24,
+    'RTX 6000 ADA':48,'RTX 5000 ADA':32,'RTX 4000 ADA':20,
+    'RX 7900 XTX':24,'RX 7900 XT':20,'RX 7900 GRE':16,
+    'RX 7800 XT':16,'RX 7700 XT':12,'RX 7600':8,
+    'RX 6950 XT':16,'RX 6900 XT':16,'RX 6800 XT':16,'RX 6800':16,
+    'RX 6700 XT':12,'RX 6600 XT':8,
+    'ARC A770':16,'ARC A750':8,'ARC A580':8
+  };
+
+  var APPLE_CHIPS = {
+    'M4 MAX':36,'M4 PRO':24,'M4':16,
+    'M3 MAX':36,'M3 PRO':18,'M3':16,
+    'M2 ULTRA':64,'M2 MAX':32,'M2 PRO':16,'M2':16,
+    'M1 ULTRA':64,'M1 MAX':32,'M1 PRO':16,'M1':16
+  };
+
+  // ═══════════════════════════════════════════
+  // GPU DETECTION
+  // ═══════════════════════════════════════════
+
+  function detectGPU() {
+    try {
+      var c = document.createElement('canvas');
+      var gl = c.getContext('webgl2') || c.getContext('webgl') || c.getContext('experimental-webgl');
+      if (!gl) return { renderer: 'WebGL not available', vendor: 'Unknown' };
+      var ext = gl.getExtension('WEBGL_debug_renderer_info');
+      if (!ext) return { renderer: 'Debug info blocked', vendor: 'Unknown' };
+      return {
+        renderer: gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) || 'Unknown',
+        vendor: gl.getParameter(ext.UNMASKED_VENDOR_WEBGL) || 'Unknown'
+      };
+    } catch (e) {
+      return { renderer: 'Detection failed', vendor: 'Unknown' };
+    }
+  }
+
+  function lookupVRAM(renderer) {
+    var upper = renderer.toUpperCase();
+    // Apple Silicon
+    if (/APPLE/.test(upper) || /\bM[1-4]\b/.test(upper)) {
+      var chips = Object.keys(APPLE_CHIPS);
+      for (var i = 0; i < chips.length; i++) {
+        if (upper.indexOf(chips[i]) >= 0) {
+          return { vram: APPLE_CHIPS[chips[i]], unified: true, chip: chips[i] };
+        }
+      }
+      return { vram: 16, unified: true, chip: 'Apple Silicon' };
+    }
+    // Discrete GPUs - check longer names first (sorted by name length desc)
+    var keys = Object.keys(GPU_VRAM).sort(function(a, b) { return b.length - a.length; });
+    for (var j = 0; j < keys.length; j++) {
+      if (upper.indexOf(keys[j]) >= 0) {
+        return { vram: GPU_VRAM[keys[j]], unified: false, chip: keys[j] };
+      }
+    }
+    return { vram: null, unified: false, chip: null };
+  }
+
+  // ═══════════════════════════════════════════
+  // PREDICTION MODEL
+  // ═══════════════════════════════════════════
+
+  function getAvailMem(vram, ram, unified) {
+    if (unified) return vram * 0.75;
+    return vram + ram * 0.6;
+  }
+
+  function predictTokS(totalMem, modelGb) {
+    var free = Math.max(0, totalMem - modelGb);
+    if (free <= 0) return 0;
+    return C * Math.pow(free, ALPHA);
+  }
+
+  function maxContext(totalMem, modelGb) {
+    var free = totalMem - modelGb;
+    if (free <= 0) return 512;
+    var kvBudget = free * 0.3;
+    // Qwen3.5-35B-A3B: 40 layers, GQA 2 KV heads, head_dim 128, q8_0 = 1 byte
+    var bytesPerTok = 2 * 40 * 2 * 128 * 1; // 20480
+    var ctx = Math.floor((kvBudget * 1e9) / bytesPerTok);
+    return Math.min(131072, Math.max(512, Math.round(ctx / 512) * 512));
+  }
+
+  function getConfig(vram, ram, unified) {
+    var totalMem = getAvailMem(vram, ram, unified);
+    var bestQ = null, bestQAT = 0;
+    var rows = QUANTS.map(function(q) {
+      var fits = q.sizeGb < totalMem;
+      var toks = fits ? predictTokS(totalMem, q.sizeGb) : 0;
+      var qat = toks * q.quality;
+      var ctx = fits ? maxContext(totalMem, q.sizeGb) : 0;
+      if (fits && qat > bestQAT) { bestQAT = qat; bestQ = q; }
+      return { name: q.name, sizeGb: q.sizeGb, quality: q.quality, fits: fits, toks: toks, qat: qat, ctx: ctx, bpw: q.bpw };
+    });
+
+    var cores = navigator.hardwareConcurrency || 8;
+    var nThreads = Math.min(12, Math.round(cores * 0.75));
+    var nGpu, nBatch, nUbatch;
+    if (unified) { nGpu = 99; nBatch = 512; nUbatch = 256; }
+    else if (vram >= 24) { nGpu = 99; nBatch = 512; nUbatch = 256; }
+    else if (vram >= 16) { nGpu = 27; nBatch = 252; nUbatch = 94; }
+    else if (vram >= 12) { nGpu = 27; nBatch = 32; nUbatch = 16; }
+    else if (vram >= 8)  { nGpu = 16; nBatch = 64; nUbatch = 64; }
+    else { nGpu = Math.max(5, Math.floor(vram * 2)); nBatch = 32; nUbatch = 16; }
+
+    return {
+      rows: rows, bestQ: bestQ, totalMem: totalMem,
+      nGpu: nGpu, nBatch: nBatch, nUbatch: nUbatch, nThreads: nThreads,
+      bestTokS: bestQ ? predictTokS(totalMem, bestQ.sizeGb) : 0,
+      bestCtx: bestQ ? maxContext(totalMem, bestQ.sizeGb) : 0
+    };
+  }
+
+  // ═══════════════════════════════════════════
+  // UI
+  // ═══════════════════════════════════════════
+
+  var chart = null;
+  var isUnified = false;
+
+  function fmt(v) {
+    if (v <= 0) return '\u2014';
+    return v >= 10 ? v.toFixed(1) : v.toFixed(2);
+  }
+  function fmtCtx(v) {
+    if (v <= 0) return '\u2014';
+    return v >= 1024 ? (v/1024).toFixed(0)+'K' : ''+v;
+  }
+
+  function update() {
+    var vram = +document.getElementById('vram-slider').value;
+    var ram = +document.getElementById('ram-slider').value;
+    var cfg = getConfig(vram, ram, isUnified);
+
+    // Metrics
+    var mT = document.getElementById('metric-toks');
+    var mQ = document.getElementById('metric-quant');
+    var mC = document.getElementById('metric-ctx');
+    var mL = document.getElementById('metric-quality');
+
+    if (cfg.bestQ) {
+      mT.textContent = fmt(cfg.bestTokS);
+      mT.className = 'metric' + (cfg.bestTokS >= 15 ? '' : cfg.bestTokS >= 5 ? ' warn' : ' danger');
+      mQ.textContent = cfg.bestQ.name;
+      mQ.className = 'metric';
+      mC.textContent = fmtCtx(cfg.bestCtx);
+      mC.className = 'metric';
+      mL.textContent = (cfg.bestQ.quality*100).toFixed(0)+'%';
+      mL.className = 'metric' + (cfg.bestQ.quality >= 0.9 ? '' : cfg.bestQ.quality >= 0.8 ? ' warn' : ' danger');
+    } else {
+      mT.textContent = '\u2014'; mT.className = 'metric danger';
+      mQ.textContent = 'None'; mQ.className = 'metric danger';
+      mC.textContent = '\u2014'; mL.textContent = '\u2014';
+    }
+
+    // Table
+    var tbody = document.getElementById('quant-tbody');
+    tbody.innerHTML = '';
+    cfg.rows.forEach(function(r) {
+      var tr = document.createElement('tr');
+      var isRec = cfg.bestQ && r.name === cfg.bestQ.name;
+      if (isRec) tr.className = 'recommended';
+      var tags = '';
+      if (isRec) tags += '<span class="tag tag-rec">BEST</span>';
+      if (r.toks > 20) tags += '<span class="tag tag-fast">FAST</span>';
+      if (r.quality < 0.8) tags += '<span class="tag tag-warn">LOW-Q</span>';
+      tr.innerHTML =
+        '<td style="padding-left:1.5rem">' + r.name + tags + '</td>' +
+        '<td class="size">' + r.sizeGb + ' GB</td>' +
+        '<td class="qual">' + (r.quality*100).toFixed(0) + '%</td>' +
+        '<td class="' + (r.fits?'tok':'na') + '">' + (r.fits ? fmt(r.toks)+' tok/s' : 'Won\'t fit') + '</td>' +
+        '<td>' + (r.fits ? '\u2705 '+fmtCtx(r.ctx)+' ctx' : '\u274C') + '</td>';
+      tbody.appendChild(tr);
+    });
+
+    // Config
+    var ce = document.getElementById('config-output');
+    if (cfg.bestQ) {
+      ce.innerHTML =
+        '<span class="comment"># Recommended llama.cpp config for '+cfg.bestQ.name+'</span>\n' +
+        '<span class="comment"># Estimated: '+fmt(cfg.bestTokS)+' tok/s \u00b7 '+fmtCtx(cfg.bestCtx)+' context</span>\n\n' +
+        '<span class="key">--model</span>       <span class="val">Qwen3.5-35B-A3B-'+cfg.bestQ.name+'.gguf</span>\n' +
+        '<span class="key">--n-gpu-layers</span> <span class="val">'+cfg.nGpu+'</span>\n' +
+        '<span class="key">--ctx-size</span>     <span class="val">'+Math.min(cfg.bestCtx,8192)+'</span>\n' +
+        '<span class="key">--batch-size</span>   <span class="val">'+cfg.nBatch+'</span>\n' +
+        '<span class="key">--ubatch-size</span>  <span class="val">'+cfg.nUbatch+'</span>\n' +
+        '<span class="key">--threads</span>      <span class="val">'+cfg.nThreads+'</span>\n' +
+        '<span class="key">--flash-attn</span>   <span class="val">1</span>\n' +
+        '<span class="key">--type-k</span>       <span class="val">q8_0</span>\n' +
+        '<span class="key">--type-v</span>       <span class="val">q8_0</span>\n' +
+        '<span class="key">--op-offload</span>   <span class="val">1</span>\n\n' +
+        '<span class="comment"># Hardware: '+vram+'GB VRAM + '+ram+'GB RAM'+(isUnified?' (unified)':'')+'</span>\n' +
+        '<span class="comment"># Effective available memory: '+cfg.totalMem.toFixed(1)+'GB</span>';
+    } else {
+      ce.innerHTML = '<span class="comment"># Insufficient memory \u2014 minimum '+QUANTS[0].sizeGb+'GB required</span>';
+    }
+
+    // Chart
+    drawChart(cfg, vram, ram);
+  }
+
+  function drawChart(cfg) {
+    var canvas = document.getElementById('speed-chart');
+    if (!canvas) return;
+    var ctx2d = canvas.getContext('2d');
+    if (chart) chart.destroy();
+
+    // Curve data
+    var curveX = [], curveY = [], qatY = [];
+    for (var m = 10; m <= 80; m += 0.5) {
+      var bestForM = null, bestQAT = 0;
+      QUANTS.forEach(function(q) {
+        if (q.sizeGb >= m) return;
+        var t = predictTokS(m, q.sizeGb);
+        var qat = t * q.quality;
+        if (qat > bestQAT) { bestQAT = qat; bestForM = q; }
+      });
+      if (bestForM) {
+        curveX.push(m);
+        curveY.push(predictTokS(m, bestForM.sizeGb));
+        qatY.push(bestQAT);
+      }
+    }
+
+    // Calibration (measured on RTX 3070 + 32GB)
+    var calMem = getAvailMem(8, 32, false);
+    var calPts = QUANTS.filter(function(q){return q.bestTokS!==null;}).map(function(q) {
+      return { x: calMem, y: q.bestTokS };
+    });
+
+    var datasets = [
+      {
+        label: 'Predicted tok/s (best quant)',
+        data: curveX.map(function(x,i){return{x:x,y:curveY[i]};}),
+        borderColor: '#58a6ff',
+        backgroundColor: 'rgba(88,166,255,0.1)',
+        fill: true, tension: 0.4, pointRadius: 0, borderWidth: 2
+      },
+      {
+        label: 'Quality-adjusted throughput',
+        data: curveX.map(function(x,i){return{x:x,y:qatY[i]};}),
+        borderColor: '#3fb950',
+        backgroundColor: 'rgba(63,185,80,0.05)',
+        fill: true, tension: 0.4, pointRadius: 0, borderWidth: 1.5, borderDash: [4,4]
+      },
+      {
+        label: 'Measured (RTX 3070)',
+        data: calPts,
+        borderColor: '#d29922', backgroundColor: '#d29922',
+        pointRadius: 5, pointHoverRadius: 7, showLine: false
+      }
+    ];
+
+    if (cfg.bestQ) {
+      datasets.push({
+        label: 'Your hardware',
+        data: [{x: cfg.totalMem, y: cfg.bestTokS}],
+        borderColor: '#f85149', backgroundColor: '#f85149',
+        pointRadius: 8, pointHoverRadius: 10, pointStyle: 'star', showLine: false
+      });
+    }
+
+    chart = new Chart(ctx2d, {
+      type: 'scatter',
+      data: { datasets: datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { intersect: false, mode: 'nearest' },
+        plugins: {
+          legend: {
+            labels: {
+              color: '#8b949e',
+              font: { size: 10 },
+              usePointStyle: true, pointStyleWidth: 12
+            }
+          },
+          tooltip: {
+            backgroundColor: '#1c2129',
+            borderColor: '#30363d',
+            borderWidth: 1,
+            callbacks: {
+              label: function(c) {
+                return c.dataset.label+': '+c.parsed.y.toFixed(1)+' tok/s @ '+c.parsed.x.toFixed(0)+'GB';
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            title: { display: true, text: 'Available Memory (GB)', color: '#8b949e' },
+            grid: { color: 'rgba(48,54,61,0.5)' },
+            ticks: { color: '#8b949e' },
+            min: 8
+          },
+          y: {
+            title: { display: true, text: 'Tokens per Second', color: '#8b949e' },
+            grid: { color: 'rgba(48,54,61,0.5)' },
+            ticks: { color: '#8b949e' },
+            min: 0
+          }
+        }
+      }
+    });
+  }
+
+  // ═══════════════════════════════════════════
+  // INIT
+  // ═══════════════════════════════════════════
+
+  function init() {
+    var gpu = detectGPU();
+    var info = lookupVRAM(gpu.renderer);
+    var ua = navigator.userAgent;
+    var plat = /Mac/.test(ua) ? 'macOS' : /Win/.test(ua) ? 'Windows' : /Linux/.test(ua) ? 'Linux' : 'Unknown';
+
+    document.getElementById('gpu-name').textContent = gpu.renderer;
+    document.getElementById('platform').textContent = plat;
+    document.getElementById('cpu-cores').textContent = navigator.hardwareConcurrency || '?';
+
+    isUnified = info.unified;
+
+    if (info.vram !== null) {
+      document.getElementById('gpu-vram').textContent = info.vram + 'GB' + (info.unified ? ' (unified)' : ' VRAM');
+      document.getElementById('vram-slider').value = info.vram;
+      document.getElementById('vram-display').textContent = info.vram + ' GB';
+      if (info.unified) {
+        document.getElementById('ram-slider').value = info.vram;
+        document.getElementById('ram-display').textContent = info.vram + ' GB';
+      }
+    } else {
+      document.getElementById('gpu-vram').textContent = 'Unknown \u2014 use slider \u2193';
+    }
+
+    document.getElementById('vram-slider').addEventListener('input', function() {
+      document.getElementById('vram-display').textContent = this.value + ' GB';
+      update();
+    });
+    document.getElementById('ram-slider').addEventListener('input', function() {
+      document.getElementById('ram-display').textContent = this.value + ' GB';
+      update();
+    });
+
+    update();
+  }
+
+  if (typeof Chart !== 'undefined') { init(); }
+  else { window.addEventListener('load', init); }
+})();
+</script>
+</body>
+</html>
