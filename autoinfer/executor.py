@@ -132,14 +132,15 @@ def run_experiment(
     """
     start = time.monotonic()
 
-    # Map kv_type string to integer code
+    # Keep kv_type as string name for llama-bench CLI (e.g. "q8_0", "f16")
     kv_type = params.get("kv_type", "q8_0")
     if isinstance(kv_type, str):
-        type_k = KV_NAME_TO_INT.get(kv_type, 8)
-        type_v = type_k
+        type_k = kv_type  # pass directly e.g. "q8_0"
     else:
-        type_k = int(kv_type)
-        type_v = type_k
+        # reverse map int→name
+        _INT_TO_KV = {v: k for k, v in KV_NAME_TO_INT.items()}
+        type_k = _INT_TO_KV.get(int(kv_type), "q8_0")
+    type_v = type_k
 
     flash_attn_val = params.get("flash_attn", True)
     if isinstance(flash_attn_val, bool):
@@ -149,23 +150,21 @@ def run_experiment(
 
     cmd = [
         bench_binary,
-        "--model", model_path,
-        "--n-gpu", str(params.get("n_gpu", 16)),
-        "--n-ctx", str(params.get("n_ctx", 512)),
-        "--n-batch", str(params.get("batch", 252)),
-        "--n-ubatch", str(params.get("ubatch", 94)),
-        "--type-k", str(type_k),
-        "--type-v", str(type_v),
-        "--flash-attn", str(flash_int),
-        "--n-threads", str(params.get("n_threads", 11)),
-        "--n-gen", str(params.get("n_gen", 264)),
+        "-m", model_path,
+        "-ngl", str(params.get("n_gpu", 16)),
+        "-p", str(params.get("n_ctx", 512)),   # n-prompt (prefill tokens)
+        "-b", str(params.get("batch", 252)),    # batch-size
+        "-ub", str(params.get("ubatch", 94)),   # ubatch-size
+        "-ctk", str(type_k),
+        "-ctv", str(type_v),
+        "-fa", str(flash_int),
+        "-t", str(params.get("n_threads", 11)),
+        "-n", str(params.get("n_gen", 264)),
+        "-nopo", "0",  # enable op offload (no-op-offload=0)
     ]
 
-    # Optional flags
-    if params.get("op_offload", False):
-        cmd.extend(["--op-offload", "1"])
     if params.get("no_mmap", False):
-        cmd.extend(["--no-mmap", "1"])
+        cmd.extend(["-mmp", "0"])
 
     env = _build_env(llama_lib, cuda_lib)
 
