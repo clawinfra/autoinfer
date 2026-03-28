@@ -1,0 +1,620 @@
+{
+  "timestamp": "2026-03-28",
+  "total_experiments": 770,
+  "valid_experiments": 536,
+  "all_time_best": 27.589,
+  "best_config": {
+    "phase": 12,
+    "label": "p12_iq2xxs_gpu26_gen400",
+    "quant": "IQ2_XXS",
+    "tok_s": 27.589,
+    "n_gpu": 26,
+    "n_batch": 32,
+    "n_ubatch": 16,
+    "kv_type": "q8_0",
+    "n_ctx": 512
+  },
+  "quantization_scaling": {
+    "Q3_K_M": {
+      "best_tok_s": 12.331,
+      "median_tok_s": 11.038,
+      "count": 458,
+      "bpw": 3.35,
+      "quality": 1.0,
+      "size_gb": 14.7
+    },
+    "IQ2_XXS": {
+      "best_tok_s": 27.589,
+      "median_tok_s": 22.309,
+      "count": 54,
+      "bpw": 2.06,
+      "quality": 0.75,
+      "size_gb": 9.0
+    },
+    "IQ2_M": {
+      "best_tok_s": 21.621,
+      "median_tok_s": 20.08,
+      "count": 20,
+      "bpw": 2.5,
+      "quality": 0.85,
+      "size_gb": 10.5
+    },
+    "IQ3_S": {
+      "best_tok_s": 15.223,
+      "median_tok_s": 15.223,
+      "count": 1,
+      "bpw": 3.0,
+      "quality": 0.975,
+      "size_gb": 13.2
+    },
+    "IQ4_XS": {
+      "best_tok_s": 9.802,
+      "median_tok_s": 9.802,
+      "count": 1,
+      "bpw": 4.0,
+      "quality": 1.02,
+      "size_gb": 16.8
+    },
+    "Q2_K": {
+      "best_tok_s": 17.962,
+      "median_tok_s": 17.962,
+      "count": 2,
+      "bpw": 2.63,
+      "quality": 0.88,
+      "size_gb": 11.2
+    }
+  },
+  "bayesian_predictions": {
+    "current_best": {
+      "phase12_best": 27.589,
+      "phase12_config": "n_gpu=26, b=32/16, kv=q8_0, ctx=512",
+      "phase12_label": "p12_iq2xxs_gpu26_gen400",
+      "phase11_iq2xxs_best": 25.242,
+      "all_time_iq2xxs": 27.589
+    },
+    "power_law_model": {
+      "alpha": 4.247,
+      "C": 0.0,
+      "calibration_points": [
+        {
+          "quant": "Q3_K_M",
+          "measured": 12.331,
+          "predicted": 12.33
+        },
+        {
+          "quant": "IQ2_M",
+          "measured": 21.621,
+          "predicted": 22.64,
+          "error_pct": 4.7
+        },
+        {
+          "quant": "IQ2_XXS",
+          "measured": 27.589,
+          "predicted": 27.59
+        }
+      ],
+      "formula": "tok_s = 0.0000 \u00d7 (42 - model_gb)^4.247"
+    },
+    "predictions": {
+      "IQ1_M": {
+        "predicted_tok_s": 32.1,
+        "model_size_gb": 7.8,
+        "vram_free_gb": 34.2,
+        "quality_score": 0.62,
+        "quality_adj": 19.9,
+        "note": "Model at extreme compression \u2014 perplexity cliff likely"
+      },
+      "Q2_K": {
+        "predicted_tok_s": 20.6,
+        "model_size_gb": 11.2,
+        "vram_free_gb": 30.8,
+        "quality_score": 0.88,
+        "quality_adj": 18.1,
+        "note": "Uniform quantization \u2014 quality more predictable"
+      }
+    },
+    "phase12_context_analysis": {
+      "ctx_means": {
+        "256": 24.745333333333328,
+        "512": 24.1548,
+        "128": 23.39
+      },
+      "optimal_ctx": 256,
+      "insight": "Lower n_ctx = less KV cache VRAM pressure = more layers fit in VRAM"
+    },
+    "ngpu_analysis": {
+      "means_by_ngpu": {
+        "26": 25.462083333333336,
+        "27": 26.921,
+        "22": 17.962,
+        "20": 16.444
+      },
+      "optimal_ngpu": 27
+    }
+  },
+  "pareto_frontier": [
+    {
+      "quant": "IQ4_XS",
+      "tok_s": 9.802,
+      "quality_score": 1.02,
+      "quality_adj": 9.998,
+      "phase": 11,
+      "label": "p11_iq4xs_gpu15",
+      "vram_mb": 7337
+    },
+    {
+      "quant": "Q3_K_M",
+      "tok_s": 12.331,
+      "quality_score": 1.0,
+      "quality_adj": 12.331,
+      "phase": 10,
+      "label": "p10_ngpu17",
+      "vram_mb": 7751
+    },
+    {
+      "quant": "IQ3_S",
+      "tok_s": 15.223,
+      "quality_score": 0.975,
+      "quality_adj": 14.842,
+      "phase": 11,
+      "label": "p11_iq3s_gpu20_opoff",
+      "vram_mb": 7590
+    },
+    {
+      "quant": "Q2_K",
+      "tok_s": 17.962,
+      "quality_score": 0.88,
+      "quality_adj": 15.807,
+      "phase": 12,
+      "label": "p12_q2k_gpu22_q4kv",
+      "vram_mb": 7301
+    },
+    {
+      "quant": "IQ2_M",
+      "tok_s": 21.621,
+      "quality_score": 0.85,
+      "quality_adj": 18.378,
+      "phase": 11,
+      "label": "p11_iq2m_gpu24_opoff",
+      "vram_mb": 7573
+    },
+    {
+      "quant": "IQ2_XXS",
+      "tok_s": 27.589,
+      "quality_score": 0.75,
+      "quality_adj": 20.692,
+      "phase": 12,
+      "label": "p12_iq2xxs_gpu26_gen400",
+      "vram_mb": 6906
+    }
+  ],
+  "phase_progression": [
+    {
+      "phase": 4,
+      "new_best": 11.85,
+      "quant": "Q3_K_M",
+      "config": "n_gpu=16, b=64/64, kv=q8_0",
+      "improvement": 11.85,
+      "improvement_pct": 0
+    },
+    {
+      "phase": 5,
+      "new_best": 11.874,
+      "quant": "Q3_K_M",
+      "config": "n_gpu=16, b=64/128, kv=q8_0",
+      "improvement": 0.02400000000000091,
+      "improvement_pct": 0.2
+    },
+    {
+      "phase": 6,
+      "new_best": 12.114,
+      "quant": "Q3_K_M",
+      "config": "n_gpu=16, b=256/64, kv=q8_0",
+      "improvement": 0.2400000000000002,
+      "improvement_pct": 2.0
+    },
+    {
+      "phase": 10,
+      "new_best": 12.331,
+      "quant": "Q3_K_M",
+      "config": "n_gpu=17, b=252/94, kv=q8_0",
+      "improvement": 0.21699999999999875,
+      "improvement_pct": 1.8
+    },
+    {
+      "phase": 11,
+      "new_best": 25.242,
+      "quant": "IQ2_XXS",
+      "config": "n_gpu=27, b=32/16, kv=q8_0",
+      "improvement": 12.911000000000001,
+      "improvement_pct": 104.7
+    },
+    {
+      "phase": 12,
+      "new_best": 27.589,
+      "quant": "IQ2_XXS",
+      "config": "n_gpu=26, b=32/16, kv=q8_0",
+      "improvement": 2.3469999999999978,
+      "improvement_pct": 9.3
+    }
+  ],
+  "efficiency_model": {
+    "Q3_K_M": {
+      "best_tok_s": 12.331,
+      "tok_s_per_gb": 0.84,
+      "size_gb": 14.7,
+      "quality": 1.0
+    },
+    "IQ2_XXS": {
+      "best_tok_s": 27.589,
+      "tok_s_per_gb": 3.07,
+      "size_gb": 9.0,
+      "quality": 0.75
+    },
+    "IQ2_M": {
+      "best_tok_s": 21.621,
+      "tok_s_per_gb": 2.06,
+      "size_gb": 10.5,
+      "quality": 0.85
+    },
+    "IQ3_S": {
+      "best_tok_s": 15.223,
+      "tok_s_per_gb": 1.15,
+      "size_gb": 13.2,
+      "quality": 0.975
+    },
+    "IQ4_XS": {
+      "best_tok_s": 9.802,
+      "tok_s_per_gb": 0.58,
+      "size_gb": 16.8,
+      "quality": 1.02
+    },
+    "Q2_K": {
+      "best_tok_s": 17.962,
+      "tok_s_per_gb": 1.6,
+      "size_gb": 11.2,
+      "quality": 0.88
+    }
+  },
+  "top_quality_adj_rankings": [
+    {
+      "rank": 1,
+      "phase": 12,
+      "label": "p12_iq2xxs_gpu26_gen400",
+      "quant": "IQ2_XXS",
+      "tok_s": 27.589,
+      "quality_score": 0.75,
+      "quality_adj": 20.692,
+      "vram_mb": 6906,
+      "n_gpu": 26,
+      "n_batch": 32,
+      "n_ubatch": 16,
+      "kv_type": "q8_0",
+      "n_ctx": 512
+    },
+    {
+      "rank": 2,
+      "phase": 12,
+      "label": "p12_iq2xxs_gpu26_b32",
+      "quant": "IQ2_XXS",
+      "tok_s": 27.559,
+      "quality_score": 0.75,
+      "quality_adj": 20.669,
+      "vram_mb": 7595,
+      "n_gpu": 26,
+      "n_batch": 32,
+      "n_ubatch": 16,
+      "kv_type": "q8_0",
+      "n_ctx": 256
+    },
+    {
+      "rank": 3,
+      "phase": 12,
+      "label": "p12_iq2xxs_gpu26_b16",
+      "quant": "IQ2_XXS",
+      "tok_s": 27.308,
+      "quality_score": 0.75,
+      "quality_adj": 20.481,
+      "vram_mb": 6894,
+      "n_gpu": 26,
+      "n_batch": 16,
+      "n_ubatch": 8,
+      "kv_type": "q8_0",
+      "n_ctx": 256
+    },
+    {
+      "rank": 4,
+      "phase": 12,
+      "label": "p12_iq2xxs_gpu27_q4kv",
+      "quant": "IQ2_XXS",
+      "tok_s": 26.921,
+      "quality_score": 0.75,
+      "quality_adj": 20.191,
+      "vram_mb": 7146,
+      "n_gpu": 27,
+      "n_batch": 32,
+      "n_ubatch": 16,
+      "kv_type": "q4_0",
+      "n_ctx": 256
+    },
+    {
+      "rank": 5,
+      "phase": 12,
+      "label": "p12_iq2xxs_gpu26_r2",
+      "quant": "IQ2_XXS",
+      "tok_s": 26.837,
+      "quality_score": 0.75,
+      "quality_adj": 20.128,
+      "vram_mb": 6902,
+      "n_gpu": 26,
+      "n_batch": 32,
+      "n_ubatch": 16,
+      "kv_type": "q8_0",
+      "n_ctx": 256
+    },
+    {
+      "rank": 6,
+      "phase": 12,
+      "label": "p12_iq2xxs_gpu26_gen400_r2",
+      "quant": "IQ2_XXS",
+      "tok_s": 26.767,
+      "quality_score": 0.75,
+      "quality_adj": 20.075,
+      "vram_mb": 6906,
+      "n_gpu": 26,
+      "n_batch": 32,
+      "n_ubatch": 16,
+      "kv_type": "q8_0",
+      "n_ctx": 512
+    },
+    {
+      "rank": 7,
+      "phase": 12,
+      "label": "p12_iq2xxs_gpu26_q4kv",
+      "quant": "IQ2_XXS",
+      "tok_s": 26.755,
+      "quality_score": 0.75,
+      "quality_adj": 20.066,
+      "vram_mb": 6902,
+      "n_gpu": 26,
+      "n_batch": 32,
+      "n_ubatch": 16,
+      "kv_type": "q4_0",
+      "n_ctx": 256
+    },
+    {
+      "rank": 8,
+      "phase": 12,
+      "label": "p12_iq2xxs_gpu26_b64",
+      "quant": "IQ2_XXS",
+      "tok_s": 26.673,
+      "quality_score": 0.75,
+      "quality_adj": 20.005,
+      "vram_mb": 6976,
+      "n_gpu": 26,
+      "n_batch": 64,
+      "n_ubatch": 32,
+      "kv_type": "q8_0",
+      "n_ctx": 256
+    },
+    {
+      "rank": 9,
+      "phase": 12,
+      "label": "p12_iq2xxs_gpu26_t9",
+      "quant": "IQ2_XXS",
+      "tok_s": 26.249,
+      "quality_score": 0.75,
+      "quality_adj": 19.687,
+      "vram_mb": 6902,
+      "n_gpu": 26,
+      "n_batch": 32,
+      "n_ubatch": 16,
+      "kv_type": "q8_0",
+      "n_ctx": 256
+    },
+    {
+      "rank": 10,
+      "phase": 11,
+      "label": "p11_iq2xxs_gpu27_q8kv",
+      "quant": "IQ2_XXS",
+      "tok_s": 25.242,
+      "quality_score": 0.75,
+      "quality_adj": 18.931,
+      "vram_mb": 7827,
+      "n_gpu": 27,
+      "n_batch": 32,
+      "n_ubatch": 16,
+      "kv_type": "q8_0",
+      "n_ctx": 256
+    },
+    {
+      "rank": 11,
+      "phase": 12,
+      "label": "p12_iq2xxs_gpu26_n512_gen264",
+      "quant": "IQ2_XXS",
+      "tok_s": 24.727,
+      "quality_score": 0.75,
+      "quality_adj": 18.545,
+      "vram_mb": 6906,
+      "n_gpu": 26,
+      "n_batch": 32,
+      "n_ubatch": 16,
+      "kv_type": "q8_0",
+      "n_ctx": 512
+    },
+    {
+      "rank": 12,
+      "phase": 11,
+      "label": "p11_iq2xxs_gpu27_t9",
+      "quant": "IQ2_XXS",
+      "tok_s": 24.715,
+      "quality_score": 0.75,
+      "quality_adj": 18.536,
+      "vram_mb": 7827,
+      "n_gpu": 27,
+      "n_batch": 32,
+      "n_ubatch": 16,
+      "kv_type": "q8_0",
+      "n_ctx": 256
+    },
+    {
+      "rank": 13,
+      "phase": 11,
+      "label": "p11_iq2m_gpu24_opoff",
+      "quant": "IQ2_M",
+      "tok_s": 21.621,
+      "quality_score": 0.85,
+      "quality_adj": 18.378,
+      "vram_mb": 7573,
+      "n_gpu": 24,
+      "n_batch": 252,
+      "n_ubatch": 94,
+      "kv_type": "q8_0",
+      "n_ctx": 512
+    },
+    {
+      "rank": 14,
+      "phase": 11,
+      "label": "p11_iq2xxs_gpu27_r1",
+      "quant": "IQ2_XXS",
+      "tok_s": 24.057,
+      "quality_score": 0.75,
+      "quality_adj": 18.043,
+      "vram_mb": 7827,
+      "n_gpu": 27,
+      "n_batch": 32,
+      "n_ubatch": 16,
+      "kv_type": "q8_0",
+      "n_ctx": 256
+    },
+    {
+      "rank": 15,
+      "phase": 11,
+      "label": "p11_iq2xxs_gpu27_t9_r3",
+      "quant": "IQ2_XXS",
+      "tok_s": 24.01,
+      "quality_score": 0.75,
+      "quality_adj": 18.008,
+      "vram_mb": 7827,
+      "n_gpu": 27,
+      "n_batch": 32,
+      "n_ubatch": 16,
+      "kv_type": "q8_0",
+      "n_ctx": 256
+    }
+  ],
+  "interaction_effects_summary": {
+    "flash_attn_speedup": null,
+    "ngpu_sweet_spots": {
+      "Q3_K_M": 17,
+      "IQ2_XXS": 26,
+      "IQ2_M": 24,
+      "IQ3_S": 20,
+      "IQ4_XS": 15,
+      "Q2_K": 22
+    },
+    "best_kv_type": "q8_0"
+  },
+  "anomalies": [
+    {
+      "phase": 9,
+      "exp_id": "13",
+      "label": "phase9_th16",
+      "tok_s": 3.737,
+      "group_mean": 10.94,
+      "group_std": 1.21,
+      "z_score": -5.97,
+      "type": "outlier_low"
+    },
+    {
+      "phase": 8,
+      "exp_id": "26",
+      "label": "threads_16_b256_64",
+      "tok_s": 3.985,
+      "group_mean": 10.94,
+      "group_std": 1.21,
+      "z_score": -5.76,
+      "type": "outlier_low"
+    },
+    {
+      "phase": 6,
+      "exp_id": "149",
+      "label": "pinned_0-7_t8",
+      "tok_s": 1.593,
+      "group_mean": 9.98,
+      "group_std": 2.36,
+      "z_score": -3.56,
+      "type": "outlier_low"
+    },
+    {
+      "phase": 6,
+      "exp_id": "110",
+      "label": "q8_t12_b128_64_g460",
+      "tok_s": 1.869,
+      "group_mean": 9.98,
+      "group_std": 2.36,
+      "z_score": -3.44,
+      "type": "outlier_low"
+    },
+    {
+      "phase": 7,
+      "exp_id": "12",
+      "label": "qjl256_rust_throughput",
+      "tok_s": 8.185,
+      "group_mean": 11.39,
+      "group_std": 1.05,
+      "z_score": -3.05,
+      "type": "outlier_low"
+    },
+    {
+      "phase": 6,
+      "exp_id": "31",
+      "label": "threads_1",
+      "tok_s": 5.602,
+      "group_mean": 10.26,
+      "group_std": 1.68,
+      "z_score": -2.77,
+      "type": "outlier_low"
+    },
+    {
+      "phase": 6,
+      "exp_id": "68",
+      "label": "t16_b128_64",
+      "tok_s": 4.031,
+      "group_mean": 9.98,
+      "group_std": 2.36,
+      "z_score": -2.52,
+      "type": "outlier_low"
+    },
+    {
+      "phase": 11,
+      "exp_id": "78",
+      "label": "p11_iq2xxs_gpu27_t7",
+      "tok_s": 20.131,
+      "group_mean": 23.41,
+      "group_std": 1.38,
+      "z_score": -2.37,
+      "type": "outlier_low"
+    },
+    {
+      "phase": 8,
+      "exp_id": "27",
+      "label": "threads_20_b256_64",
+      "tok_s": 8.08,
+      "group_mean": 10.94,
+      "group_std": 1.21,
+      "z_score": -2.37,
+      "type": "outlier_low"
+    },
+    {
+      "phase": 8,
+      "exp_id": "99",
+      "label": "ctx256_g128_r5",
+      "tok_s": 8.828,
+      "group_mean": 10.58,
+      "group_std": 0.75,
+      "z_score": -2.34,
+      "type": "outlier_low"
+    }
+  ]
+}
