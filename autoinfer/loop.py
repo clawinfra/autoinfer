@@ -49,7 +49,7 @@ SEARCH_SPACE = {
     # - Conservative ngl: 4-12 layers only — anything higher OOMs on 8GB
     # - Small batch + ubatch: large batches = OOM; 32/16 or 64/32 are safe starting points
     # - n_ctx=512 max (larger = OOM on 8GB with 17GB model)
-    "n_gpu": {"type": "int", "low": 2, "high": 12},          # 8GB VRAM limit, most layers CPU
+    "n_gpu": {"type": "int", "low": 0, "high": 12},          # Nemotron 17GB is CPU-only; 0=pure CPU, small ngl still tested
     "n_ctx": {"type": "categorical", "choices": [256, 512]},  # keep small — OOM risk
     "batch": {"type": "int", "low": 16, "high": 128},         # conservative batch sizes
     "ubatch": {"type": "int", "low": 8, "high": 64},          # ubatch ≤ batch always
@@ -64,16 +64,28 @@ SEARCH_SPACE = {
 # Based on Apple Flash Attn + PolarQuant + GIL thread guidance.
 # These are enqueued FIRST before any Bayesian proposals.
 NEMOTRON_PRIORITY_SEEDS = [
-    # Seed 1: ultra-conservative — pure CPU offload baseline
-    {"n_gpu": 2, "n_ctx": 256, "batch": 32, "ubatch": 16, "n_threads": 4, "n_gen": 64, "kv_type": "q4_0", "flash_attn": True},
-    # Seed 2: minimal GPU — 4 layers, GIL-optimal 6 threads
-    {"n_gpu": 4, "n_ctx": 256, "batch": 32, "ubatch": 16, "n_threads": 6, "n_gen": 64, "kv_type": "q4_0", "flash_attn": True},
-    # Seed 3: iq4_nl PolarQuant KV — non-linear quant saves KV VRAM
-    {"n_gpu": 4, "n_ctx": 512, "batch": 64, "ubatch": 32, "n_threads": 6, "n_gen": 128, "kv_type": "iq4_nl", "flash_attn": True},
-    # Seed 4: 8 GPU layers + q8_0 KV — if 4 layers work, try 8
-    {"n_gpu": 8, "n_ctx": 256, "batch": 32, "ubatch": 16, "n_threads": 4, "n_gen": 64, "kv_type": "q8_0", "flash_attn": True},
-    # Seed 5: GIL 8 threads + q4_0 — parallelise CPU layers
-    {"n_gpu": 6, "n_ctx": 512, "batch": 64, "ubatch": 32, "n_threads": 8, "n_gen": 128, "kv_type": "q4_0", "flash_attn": True},
+    # ── Qwen3.5 transfer seeds ──────────────────────────────────────────────
+    # Qwen3.5 all-time best: 29.899 tok/s @ n_gpu=27, batch=32/16, threads=8,
+    # q8_0 KV, flash=1, op_offload=1.  Nemotron is CPU-only (17GB > 8GB VRAM)
+    # so n_gpu is dropped to 0, but batch/threads/kv/flash transfer directly.
+    # This is Bayesian transfer learning: Qwen posterior → Nemotron prior.
+    #
+    # Seed 1: direct Qwen best-config transfer (CPU-only, same batch/threads/KV)
+    {"n_gpu": 0, "n_ctx": 512, "batch": 32, "ubatch": 16, "n_threads": 8,
+     "n_gen": 64, "kv_type": "q8_0", "flash_attn": True},
+    # Seed 2: Qwen best batch with 12 threads (Nemotron is denser — may need more)
+    {"n_gpu": 0, "n_ctx": 256, "batch": 32, "ubatch": 16, "n_threads": 12,
+     "n_gen": 64, "kv_type": "q8_0", "flash_attn": True},
+    # Seed 3: larger batch from Qwen phase 10 (batch=252/94 scaled down for CPU)
+    {"n_gpu": 0, "n_ctx": 256, "batch": 128, "ubatch": 64, "n_threads": 8,
+     "n_gen": 64, "kv_type": "q4_0", "flash_attn": True},
+    # ── Nemotron-specific seeds ─────────────────────────────────────────────
+    # Seed 4: iq4_nl PolarQuant KV — non-linear quant, best quality/BW ratio
+    {"n_gpu": 0, "n_ctx": 512, "batch": 64, "ubatch": 32, "n_threads": 8,
+     "n_gen": 64, "kv_type": "iq4_nl", "flash_attn": True},
+    # Seed 5: TurboQuant asymmetric — q8_0 K + q4_0 V (Google paper guidance)
+    {"n_gpu": 0, "n_ctx": 256, "batch": 32, "ubatch": 16, "n_threads": 8,
+     "n_gen": 64, "kv_type": "q8_0", "kv_type_v": "q4_0", "flash_attn": True},
 ]
 
 
