@@ -55,7 +55,8 @@ SEARCH_SPACE = {
     "ubatch": {"type": "int", "low": 8, "high": 64},          # ubatch ≤ batch always
     "n_threads": {"type": "int", "low": 2, "high": 8},        # GIL-friendly: 4-8 threads optimal
     "n_gen": {"type": "int", "low": 64, "high": 256},         # shorter gen = faster timeout detection
-    "kv_type": {"type": "categorical", "choices": ["q4_0", "iq4_nl", "q8_0"]},  # PolarQuant: iq4_nl = non-linear quant
+    "kv_type": {"type": "categorical", "choices": ["q4_0", "iq4_nl", "q8_0"]},  # PolarQuant: iq4_nl = non-linear quant; TurboQuant: q4_0=4x BW gain
+    "kv_type_v": {"type": "categorical", "choices": ["q4_0", "q8_0", "same"]},  # TurboQuant asymmetric: K≠V compression; "same" = use kv_type for both
     "flash_attn": {"type": "categorical", "choices": [True]},  # FORCE fa=1: Apple Flash Attn required for SSM/MoE
 }
 
@@ -433,11 +434,12 @@ def run_loop(config: LoopConfig) -> dict:
 
         logger.debug(f"Experiment #{exp_count}: {params}")
 
-        # Run the experiment
+        # Run the experiment — 600s timeout for large CPU-only models (17GB needs ~30s load)
         result = run_experiment(
             params=params,
             bench_binary=config.bench_binary,
             model_path=config.model_path,
+            timeout=600,
         )
 
         # Record to TSV
@@ -456,6 +458,50 @@ def run_loop(config: LoopConfig) -> dict:
         if not result.success:
             failures += 1
             logger.debug(f"  → FAILED: {result.status} ({result.notes})")
+
+            # ── Self-direction: detect failure patterns and adapt ──
+            recent_statuses = [e["status"] for e in results_log[-5:]] if results_log else []
+            consecutive_timeouts = sum(1 for s in recent_statuses if s == "timeout")
+            consecutive_ooms = sum(1 for s in recent_statuses if s == "oom")
+
+            if consecutive_timeouts >= 3:
+                # Too many timeouts: shrink experiment to fit within timeout budget
+                if params.get("n_gen", 128) > 64:
+                    logger.warning(f"[self-direct] {consecutive_timeouts} consecutive timeouts — "
+                                   f"enqueuing reduced n_gen=64, n_ctx=256 variant")
+                    reduced = params.copy()
+                    reduced["n_gen"] = 64
+                    reduced["n_ctx"] = 256
+                    try:
+                        study.enqueue_trial(reduced)
+                    except Exception:
+                        pass
+                elif params.get("n_gpu", 0) > 0:
+                    # Still timing out with small gen? Drop to CPU-only
+                    logger.warning(f"[self-direct] Persistent timeouts — forcing n_gpu=0 (CPU-only)")
+                    cpu_params = params.copy()
+                    cpu_params["n_gpu"] = 0
+                    cpu_params["n_gen"] = 64
+                    cpu_params["n_ctx"] = 256
+                    try:
+                        study.enqueue_trial(cpu_params)
+                    except Exception:
+                        pass
+
+            if consecutive_ooms >= 3:
+                # OOM: reduce GPU layers
+                current_ngl = params.get("n_gpu", 0)
+                if current_ngl > 2:
+                    reduced_ngl = max(0, current_ngl - 4)
+                    logger.warning(f"[self-direct] {consecutive_ooms} consecutive OOMs — "
+                                   f"enqueuing n_gpu={reduced_ngl}")
+                    oom_params = params.copy()
+                    oom_params["n_gpu"] = reduced_ngl
+                    try:
+                        study.enqueue_trial(oom_params)
+                    except Exception:
+                        pass
+
             return float("-inf")
 
         recent_tok_s.append(result.tok_s)
