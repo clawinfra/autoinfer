@@ -20,6 +20,7 @@ from __future__ import annotations
 import csv
 import glob
 import logging
+import math
 import os
 import time
 from dataclasses import dataclass, field
@@ -49,8 +50,8 @@ SEARCH_SPACE = {
     # - Conservative ngl: 4-12 layers only — anything higher OOMs on 8GB
     # - Small batch + ubatch: large batches = OOM; 32/16 or 64/32 are safe starting points
     # - n_ctx=512 max (larger = OOM on 8GB with 17GB model)
-    "n_gpu": {"type": "int", "low": 0, "high": 12},          # Nemotron 17GB is CPU-only; 0=pure CPU, small ngl still tested
-    "n_ctx": {"type": "categorical", "choices": [256, 512]},  # keep small — OOM risk
+    "n_gpu": {"type": "int", "low": 0, "high": 32},           # 0=CPU-only; up to 32 layers for GPU-resident models
+    "n_ctx": {"type": "categorical", "choices": [512, 1024, 2048, 4096, 8192]},  # ctx expansion — push beyond 512
     "batch": {"type": "int", "low": 16, "high": 128},         # conservative batch sizes
     "ubatch": {"type": "int", "low": 8, "high": 64},          # ubatch ≤ batch always
     "n_threads": {"type": "int", "low": 2, "high": 8},        # GIL-friendly: 4-8 threads optimal
@@ -64,28 +65,26 @@ SEARCH_SPACE = {
 # Based on Apple Flash Attn + PolarQuant + GIL thread guidance.
 # These are enqueued FIRST before any Bayesian proposals.
 NEMOTRON_PRIORITY_SEEDS = [
-    # ── Qwen3.5 transfer seeds ──────────────────────────────────────────────
-    # Qwen3.5 all-time best: 29.899 tok/s @ n_gpu=27, batch=32/16, threads=8,
-    # q8_0 KV, flash=1, op_offload=1.  Nemotron is CPU-only (17GB > 8GB VRAM)
-    # so n_gpu is dropped to 0, but batch/threads/kv/flash transfer directly.
-    # This is Bayesian transfer learning: Qwen posterior → Nemotron prior.
+    # ── Qwen3.5 transfer seeds (Bayesian prior transfer) ────────────────────
+    # Qwen best: 29.899 tok/s @ n_gpu=27, batch=32/16, threads=8, q8_0 KV, flash=1, ctx=512
+    # Nemotron = CPU-only (17GB > 8GB), so n_gpu=0. Other params transfer directly.
+    # NEW GOAL: also push ctx beyond 512. CPU RAM = 16GB, no VRAM constraint on ctx.
     #
-    # Seed 1: direct Qwen best-config transfer (CPU-only, same batch/threads/KV)
+    # Seed 1: Qwen best-config transfer (CPU baseline)
     {"n_gpu": 0, "n_ctx": 512, "batch": 32, "ubatch": 16, "n_threads": 8,
      "n_gen": 64, "kv_type": "q8_0", "flash_attn": True},
-    # Seed 2: Qwen best batch with 12 threads (Nemotron is denser — may need more)
-    {"n_gpu": 0, "n_ctx": 256, "batch": 32, "ubatch": 16, "n_threads": 12,
-     "n_gen": 64, "kv_type": "q8_0", "flash_attn": True},
-    # Seed 3: larger batch from Qwen phase 10 (batch=252/94 scaled down for CPU)
-    {"n_gpu": 0, "n_ctx": 256, "batch": 128, "ubatch": 64, "n_threads": 8,
-     "n_gen": 64, "kv_type": "q4_0", "flash_attn": True},
-    # ── Nemotron-specific seeds ─────────────────────────────────────────────
-    # Seed 4: iq4_nl PolarQuant KV — non-linear quant, best quality/BW ratio
-    {"n_gpu": 0, "n_ctx": 512, "batch": 64, "ubatch": 32, "n_threads": 8,
-     "n_gen": 64, "kv_type": "iq4_nl", "flash_attn": True},
-    # Seed 5: TurboQuant asymmetric — q8_0 K + q4_0 V (Google paper guidance)
-    {"n_gpu": 0, "n_ctx": 256, "batch": 32, "ubatch": 16, "n_threads": 8,
+    # Seed 2: TurboQuant asymmetric + ctx=1024 (Google paper: K=q8_0, V=q4_0)
+    {"n_gpu": 0, "n_ctx": 1024, "batch": 32, "ubatch": 16, "n_threads": 8,
      "n_gen": 64, "kv_type": "q8_0", "kv_type_v": "q4_0", "flash_attn": True},
+    # Seed 3: ctx=2048 with q4_0 symmetric (4x BW gain, SSM buffers quality loss)
+    {"n_gpu": 0, "n_ctx": 2048, "batch": 32, "ubatch": 16, "n_threads": 8,
+     "n_gen": 64, "kv_type": "q4_0", "kv_type_v": "q4_0", "flash_attn": True},
+    # Seed 4: ctx=4096 TurboQuant asymmetric (Apple fa=1 makes this O(N) memory)
+    {"n_gpu": 0, "n_ctx": 4096, "batch": 16, "ubatch": 16, "n_threads": 8,
+     "n_gen": 64, "kv_type": "q8_0", "kv_type_v": "q4_0", "flash_attn": True},
+    # Seed 5: Qwen best batch, larger ctx (12 threads, CPU-optimal)
+    {"n_gpu": 0, "n_ctx": 1024, "batch": 128, "ubatch": 64, "n_threads": 8,
+     "n_gen": 64, "kv_type": "q4_0", "flash_attn": True},
 ]
 
 
@@ -521,9 +520,15 @@ def run_loop(config: LoopConfig) -> dict:
             recent_tok_s = recent_tok_s[-10:]
 
         # Check for new best
-        if result.tok_s > best_tok_s:
+        # Quality-adjusted score: tok/s × log2(ctx/512)
+        # Rewards wider context windows — a 25 tok/s model at ctx=4096 scores
+        # 25 × 3.0 = 75, beating 29.9 tok/s at ctx=512 (score=29.9).
+        n_ctx_val = params.get("n_ctx", 512)
+        quality_score = result.tok_s * math.log2(max(n_ctx_val, 512) / 512 + 1)
+
+        if quality_score > best_tok_s:
             prev_best = best_tok_s
-            best_tok_s = result.tok_s
+            best_tok_s = quality_score
             best_params = params.copy()
             new_bests += 1
             report_new_best(exp_count, result.tok_s, prev_best, params)
@@ -535,7 +540,7 @@ def run_loop(config: LoopConfig) -> dict:
             avg = sum(recent_tok_s) / len(recent_tok_s) if recent_tok_s else 0
             report_progress(exp_count, exp_count, best_tok_s, best_params, avg, failures)
 
-        return result.tok_s
+        return quality_score
 
     # Determine trial count
     n_trials = config.max_experiments if config.max_experiments > 0 else 999_999_999
