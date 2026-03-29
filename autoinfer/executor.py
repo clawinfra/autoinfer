@@ -68,7 +68,64 @@ def _build_env(llama_lib: str = LLAMA_LIB, cuda_lib: str = CUDA_LIB) -> dict:
 
 
 def _parse_tok_s(output: str) -> float:
-    """Parse tok/s from bench output. Returns -1.0 if not found."""
+    """Parse tok/s from bench output. Returns -1.0 if not found.
+
+    llama-bench outputs a CSV table with header line containing "t/s" column.
+    Example CSV:
+        model,...,n_gen,test,t/s
+        ...,pp128,2.34 ± 0.05
+        ...,tg128,8.12 ± 0.03
+    We want the tg (token generation) row's t/s value.
+    """
+    # Pattern 0a: llama-bench CSV format — tg row "t/s" column
+    # CSV line ending with number after last comma e.g. "...,tg64,8.12 ± 0.03"
+    # The last column is t/s; we want the tg (generation) value
+    tg_match = re.search(r",tg\d+[^,\n]*,\s*([\d.]+)\s*(?:±|\+/-)?", output)
+    if tg_match:
+        return float(tg_match.group(1))
+
+    # Pattern 0b: llama-bench table format with | separators
+    # | ... | tg128 | 8.12 ± 0.03 |
+    m = re.search(r"\|\s*tg\d+\s*\|\s*([\d.]+)", output)
+    if m:
+        return float(m.group(1))
+
+    # Pattern 0c: any "t/s" value in CSV (last resort CSV parse)
+    # Find header "t/s" column index then grab values
+    lines = output.splitlines()
+    header_idx = -1
+    ts_col = -1
+    for i, line in enumerate(lines):
+        if "t/s" in line and ("," in line or "|" in line):
+            sep = "," if "," in line else "|"
+            cols = [c.strip() for c in line.split(sep)]
+            if "t/s" in cols:
+                ts_col = cols.index("t/s")
+                header_idx = i
+                break
+    if header_idx >= 0 and ts_col >= 0:
+        tg_val = -1.0
+        pp_val = -1.0
+        for line in lines[header_idx + 1:]:
+            if not line.strip():
+                continue
+            sep = "," if "," in line else "|"
+            parts = [c.strip() for c in line.split(sep)]
+            if len(parts) > ts_col:
+                raw = parts[ts_col].split("±")[0].split("+/-")[0].strip()
+                try:
+                    v = float(raw)
+                    if "tg" in line.lower():
+                        tg_val = max(tg_val, v)
+                    elif "pp" in line.lower():
+                        pp_val = max(pp_val, v)
+                except ValueError:
+                    pass
+        if tg_val > 0:
+            return tg_val
+        if pp_val > 0:
+            return pp_val
+
     # Pattern 1: "internal=12.331tok/s"
     m = re.search(r"internal=([\d.]+)\s*tok/s", output)
     if m:
@@ -89,7 +146,12 @@ def _parse_tok_s(output: str) -> float:
     if m:
         return float(m.group(1))
 
-    # Pattern 5: generic "X.XX tok/s"
+    # Pattern 5: "t/s" value (llama-bench short form) — "8.12 ± 0.05" near t/s
+    m = re.search(r"t/s[^\d]*([\d.]+)", output, re.IGNORECASE)
+    if m:
+        return float(m.group(1))
+
+    # Pattern 6: generic "X.XX tok/s"
     m = re.search(r"([\d.]+)\s*tok/s", output)
     if m:
         return float(m.group(1))
