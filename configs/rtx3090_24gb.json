@@ -1,0 +1,15 @@
+{
+  "name": "RTX 3090 24GB",
+  "description": "Abundant VRAM allows higher-quality quantization with all layers on GPU.",
+  "model": "Qwen3.5-35B-A3B",
+  "quant": "Q3_K_M",
+  "n_gpu_layers": 64,
+  "threads": 8,
+  "batch_size": 128,
+  "ubatch_size": 64,
+  "kv_cache_type": "f16",
+  "flash_attn": true,
+  "context_length": 4096,
+  "estimated_tok_s": "45-55",
+  "notes": "24GB VRAM fits Q3_K_M fully on GPU with f16 KV cache and 4K context."
+}

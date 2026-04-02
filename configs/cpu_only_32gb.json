@@ -1,0 +1,15 @@
+{
+  "name": "CPU Only 32GB RAM",
+  "description": "No GPU fallback. All layers on CPU with aggressive quantization.",
+  "model": "Qwen3.5-35B-A3B",
+  "quant": "IQ2_XXS",
+  "n_gpu_layers": 0,
+  "threads": 8,
+  "batch_size": 32,
+  "ubatch_size": 16,
+  "kv_cache_type": "q4_0",
+  "flash_attn": false,
+  "context_length": 512,
+  "estimated_tok_s": "3-5",
+  "notes": "CPU-only inference. Aggressive quantization to minimize memory bandwidth. Usable for evaluation, not real-time."
+}

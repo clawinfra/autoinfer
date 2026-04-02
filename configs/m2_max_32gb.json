@@ -1,0 +1,15 @@
+{
+  "name": "Apple M2 Max 32GB",
+  "description": "High-end Apple Silicon with 32GB unified memory and 400GB/s bandwidth.",
+  "model": "Qwen3.5-35B-A3B",
+  "quant": "IQ3_S",
+  "n_gpu_layers": 64,
+  "threads": 10,
+  "batch_size": 64,
+  "ubatch_size": 32,
+  "kv_cache_type": "q8_0",
+  "flash_attn": true,
+  "context_length": 4096,
+  "estimated_tok_s": "25-35",
+  "notes": "32GB unified memory fits IQ3_S fully on GPU with 4K context. High memory bandwidth helps MoE."
+}

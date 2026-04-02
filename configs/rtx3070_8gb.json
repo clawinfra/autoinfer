@@ -1,0 +1,15 @@
+{
+  "name": "RTX 3070 8GB",
+  "description": "Proven optimal from 770 experiments on Qwen3.5-35B-A3B",
+  "model": "Qwen3.5-35B-A3B",
+  "quant": "IQ2_XXS",
+  "n_gpu_layers": 27,
+  "threads": 8,
+  "batch_size": 32,
+  "ubatch_size": 16,
+  "kv_cache_type": "q8_0",
+  "flash_attn": true,
+  "context_length": 512,
+  "estimated_tok_s": "27-30",
+  "notes": "Bayesian-optimized across 770 experiments. Quality-adjusted throughput champion."
+}

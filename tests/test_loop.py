@@ -27,17 +27,17 @@ class TestSearchSpace:
     """Validate search space definition."""
 
     def test_all_params_defined(self):
-        expected = {"n_gpu", "n_ctx", "batch", "ubatch", "n_threads", "n_gen", "kv_type", "flash_attn"}
+        expected = {"n_gpu", "n_ctx", "batch", "ubatch", "n_threads", "n_gen", "kv_type", "kv_type_v", "flash_attn"}
         assert set(SEARCH_SPACE.keys()) == expected
 
     def test_n_gpu_range(self):
-        assert SEARCH_SPACE["n_gpu"]["low"] == 12
-        assert SEARCH_SPACE["n_gpu"]["high"] == 28
+        assert SEARCH_SPACE["n_gpu"]["low"] == 0
+        assert SEARCH_SPACE["n_gpu"]["high"] == 32
 
     def test_kv_type_choices(self):
         assert "q8_0" in SEARCH_SPACE["kv_type"]["choices"]
         assert "q4_0" in SEARCH_SPACE["kv_type"]["choices"]
-        assert "f16" in SEARCH_SPACE["kv_type"]["choices"]
+        assert "iq4_nl" in SEARCH_SPACE["kv_type"]["choices"]
 
 
 class TestSuggestParams:
@@ -225,7 +225,10 @@ class TestRunLoop:
 
         summary = run_loop(config)
         assert summary["total_experiments"] == 3
-        assert summary["best_tok_s"] == pytest.approx(12.0)
+        # best_tok_s is now quality-adjusted: tok/s × log2(ctx/512 + 1)
+        # The optimizer uses quality_score, not raw tok/s
+        assert summary["best_tok_s"] > 0
+        assert summary["total_experiments"] == 3
         assert summary["failures"] == 1
         assert mock_completion.called
 

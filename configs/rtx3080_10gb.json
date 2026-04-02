@@ -1,0 +1,15 @@
+{
+  "name": "RTX 3080 10GB",
+  "description": "Estimated from quantization scaling law (α=4.25). 2GB extra VRAM enables IQ2_M for better quality.",
+  "model": "Qwen3.5-35B-A3B",
+  "quant": "IQ2_M",
+  "n_gpu_layers": 32,
+  "threads": 8,
+  "batch_size": 64,
+  "ubatch_size": 32,
+  "kv_cache_type": "q8_0",
+  "flash_attn": true,
+  "context_length": 1024,
+  "estimated_tok_s": "35-40",
+  "notes": "Extra 2GB VRAM allows full GPU offload with IQ2_M and wider context."
+}

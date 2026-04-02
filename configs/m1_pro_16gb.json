@@ -1,0 +1,15 @@
+{
+  "name": "Apple M1 Pro 16GB",
+  "description": "Apple Silicon with unified memory. Metal backend via llama.cpp.",
+  "model": "Qwen3.5-35B-A3B",
+  "quant": "IQ2_M",
+  "n_gpu_layers": 32,
+  "threads": 8,
+  "batch_size": 32,
+  "ubatch_size": 16,
+  "kv_cache_type": "q4_0",
+  "flash_attn": true,
+  "context_length": 512,
+  "estimated_tok_s": "15-20",
+  "notes": "Unified memory means all layers go to GPU. Metal backend. Memory bandwidth is the bottleneck."
+}

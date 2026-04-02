@@ -1,0 +1,15 @@
+{
+  "name": "RTX 4070 Ti 12GB",
+  "description": "Ada Lovelace architecture with 12GB VRAM. Strong compute with moderate memory.",
+  "model": "Qwen3.5-35B-A3B",
+  "quant": "IQ3_S",
+  "n_gpu_layers": 40,
+  "threads": 8,
+  "batch_size": 64,
+  "ubatch_size": 32,
+  "kv_cache_type": "q8_0",
+  "flash_attn": true,
+  "context_length": 2048,
+  "estimated_tok_s": "40-50",
+  "notes": "Ada arch has better compute efficiency. 12GB fits IQ3_S with q8_0 KV at 2K context."
+}

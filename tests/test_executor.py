@@ -202,7 +202,7 @@ class TestRunExperiment:
 
     @patch("autoinfer.executor.subprocess.run")
     def test_kv_type_string(self, mock_run):
-        """Verify kv_type string is converted to integer for bench CLI."""
+        """Verify kv_type string is passed to -ctk/-ctv for llama-bench CLI."""
         mock_run.return_value = MagicMock(
             stdout="internal=10.0tok/s",
             stderr="",
@@ -215,13 +215,13 @@ class TestRunExperiment:
         )
         # Check the command that was called
         cmd = mock_run.call_args[0][0]
-        # --type-k should be "2" (q4_0 → 2)
-        type_k_idx = cmd.index("--type-k") + 1
-        assert cmd[type_k_idx] == "2"
+        # -ctk should be "q4_0" (string name for llama-bench)
+        type_k_idx = cmd.index("-ctk") + 1
+        assert cmd[type_k_idx] == "q4_0"
 
     @patch("autoinfer.executor.subprocess.run")
     def test_flash_attn_bool(self, mock_run):
-        """Verify flash_attn bool is converted to int."""
+        """Verify flash_attn bool is converted to int for -fa flag."""
         mock_run.return_value = MagicMock(
             stdout="internal=10.0tok/s",
             stderr="",
@@ -233,5 +233,5 @@ class TestRunExperiment:
             model_path="/fake/model.gguf",
         )
         cmd = mock_run.call_args[0][0]
-        flash_idx = cmd.index("--flash-attn") + 1
+        flash_idx = cmd.index("-fa") + 1
         assert cmd[flash_idx] == "0"
